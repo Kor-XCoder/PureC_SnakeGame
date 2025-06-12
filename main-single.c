@@ -206,16 +206,26 @@ Location _front(Deque* _d) { return _d->head->data; }
 Location _back(Deque* _d) { return _d->tail->data; }
 void _pop_front(Deque* _d) {
     if (_d->size <= 0) return;
-    Node* newHead = _d->head->next;
-    free(_d->head);
+    Node* oldHead = _d->head;
+    Node* newHead = oldHead->next;
+    free(oldHead);
     _d->head = newHead;
+    if (newHead)
+        newHead->prev = NULL;
+    else
+        _d->tail = NULL;
     _d->size--;
 }
 void _pop_back(Deque* _d) {
     if (_d->size <= 0) return;
-    Node* newTail = _d->tail->prev;
-    free(_d->tail);
+    Node* oldTail = _d->tail;
+    Node* newTail = oldTail->prev;
+    free(oldTail);
     _d->tail = newTail;
+    if (newTail)
+        newTail->next = NULL;
+    else
+        _d->head = NULL;
     _d->size--;
 }
 Deque* newDeque() {
@@ -362,7 +372,9 @@ void _generateApple(Snake* S) {
 
 Snake* newSnake() {
     Snake* newS = (Snake*)malloc(sizeof(Snake));
-    newS->block = *(newDeque());
+    Deque* tmp = newDeque();
+    newS->block = *tmp;
+    free(tmp);
     Deque* block = &(newS->block);
     newS->isGameOvered = false;
     newS->score = 0;
