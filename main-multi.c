@@ -6,15 +6,23 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define DEBUG false
+
+// windows.h 기본 설정
 #define stdHandle GetStdHandle(STD_OUTPUT_HANDLE)
 #define isPressed(K) (GetAsyncKeyState(K)&0x8000)
 
+// winsock2.h 기본 설정
 #define DLL_NAME "ws2_32.dll"
 #define RESOLVE(fn)  (fn##_t)GetProcAddress(hMod, #fn)
+
+
+// 로컬 스토리지 저장 파일명
 #define LOCAL_STORAGE_FILE "local_storage.json"
 
-#undef  htons     /* 매크로 → undef 해서 심볼 참조 제거 */
-#undef  htonl
+// --------- winsock2.h 직접 재정의 ---------
+#undef htons
+#undef htonl
 
 static HMODULE hMod;
 typedef int  (WINAPI *WSAStartup_t)(WORD, LPWSADATA);
@@ -25,7 +33,7 @@ typedef int  (WINAPI *send_t)(SOCKET,const char*,int,int);
 typedef int  (WINAPI *recv_t)(SOCKET,char*,int,int);
 typedef int  (WINAPI *shutdown_t)(SOCKET,int);
 typedef int  (WINAPI *closesocket_t)(SOCKET);
-typedef int (WINAPI *WSAGetLastError_t)(void);   // 추가
+typedef int (WINAPI *WSAGetLastError_t)(void);
 
 static WSAStartup_t   pWSAStartup;
 static WSACleanup_t   pWSACleanup;
@@ -42,15 +50,10 @@ typedef u_long  (WINAPI *htonl_t)(u_long);
 static htons_t phtons;
 static htonl_t phtonl;
 
-/* ─── network byte-order 헬퍼 ──────────────────────────────── */
-static unsigned short htons16(unsigned short v)
-{ return (v >> 8) | (v << 8); }               /* 16-bit swap  */
+// --------- TCP-IP 바이트 헬퍼 ---------
+static unsigned short htons16(unsigned short v){ return (v >> 8) | (v << 8); }  // 16-bit swap
 
-static unsigned long  htonl32(unsigned long  v)
-{ return  (v >> 24) |
-         ((v >>  8) & 0x0000FF00) |
-         ((v <<  8) & 0x00FF0000) |
-          (v << 24); }                        /* 32-bit swap  */
+static unsigned long htonl32(unsigned long v) { return (v>>24)|((v>>8)&0x0000FF00)|((v<<8)&0x00FF0000)|(v<<24);}   // 32-bit swap
 
 /// 소켓 통신을 위한 라이브러리가 필요한데 컴파일 옵션을 넣기에는 장치마다 다 세팅을 해줘야 해서 DLL 파일을 직접 다이나믹하게 로딩하기 위해 넣었어요 선생님 진짜 힘들었습니다 ㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠㅠ
 int winsock_dynload(void)
@@ -101,6 +104,7 @@ typedef struct Location
     int y;
 }Location;
 
+// 방향 특화 덱 자료구조 구현체
 typedef struct {
     int buf[4];
     int head, tail;
@@ -293,26 +297,16 @@ Location _front(Deque* _d) { return _d->head->data; }
 Location _back(Deque* _d) { return _d->tail->data; }
 void _pop_front(Deque* _d) {
     if (_d->size <= 0) return;
-    Node* oldHead = _d->head;
-    Node* newHead = oldHead->next;
-    free(oldHead);
+    Node* newHead = _d->head->next;
+    free(_d->head);
     _d->head = newHead;
-    if (newHead)
-        newHead->prev = NULL;
-    else
-        _d->tail = NULL;
     _d->size--;
 }
 void _pop_back(Deque* _d) {
     if (_d->size <= 0) return;
-    Node* oldTail = _d->tail;
-    Node* newTail = oldTail->prev;
-    free(oldTail);
+    Node* newTail = _d->tail->prev;
+    free(_d->tail);
     _d->tail = newTail;
-    if (newTail)
-        newTail->next = NULL;
-    else
-        _d->head = NULL;
     _d->size--;
 }
 Deque* newDeque() {
@@ -412,26 +406,16 @@ char* _2front(StrDeque* _d) { return _d->head->data; }
 char* _2back(StrDeque* _d) { return _d->tail->data; }
 void _2pop_front(StrDeque* _d) {
     if (_d->size <= 0) return;
-    StrNode* oldHead = _d->head;
-    StrNode* newHead = oldHead->next;
-    free(oldHead);
+    StrNode* newHead = _d->head->next;
+    free(_d->head);
     _d->head = newHead;
-    if (newHead)
-        newHead->prev = NULL;
-    else
-        _d->tail = NULL;
     _d->size--;
 }
-void _2pop_back(StrDeque* _d) {
+void _2pop_back(Deque* _d) {
     if (_d->size <= 0) return;
-    StrNode* oldTail = _d->tail;
-    StrNode* newTail = oldTail->prev;
-    free(oldTail);
+    Node* newTail = _d->tail->prev;
+    free(_d->tail);
     _d->tail = newTail;
-    if (newTail)
-        newTail->next = NULL;
-    else
-        _d->head = NULL;
     _d->size--;
 }
 StrDeque* newStrDeque() {
@@ -468,7 +452,6 @@ typedef struct Snake {
     bool (*Move)(struct Snake* S);
     void (*generateApple)(struct Snake* S);
 }Snake;
-
 void _addScore(Snake* S, int sc) {
     S->score += sc;
     gotoxy(120, 4);
@@ -476,7 +459,6 @@ void _addScore(Snake* S, int sc) {
     printf("현재 스코어: %d점", S->score);
     setColor(White);
 }
-
 void _addSpeed(Snake* S, int sp) {
     if (S->speed - sp < 10) return;
     setColor(LightBlue);
@@ -486,7 +468,6 @@ void _addSpeed(Snake* S, int sp) {
     printf("현재 속도: %d        ", S->speed);
     setColor(White);
 }
-
 void _generateKillTriangle(Snake* S) {
     Location R;
     do {
@@ -500,7 +481,6 @@ void _generateKillTriangle(Snake* S) {
     printf("▲");
     setColor(White);
 }
-
 void _setFacing(Snake* S, int newFacing) {
     if (ReverseDirection(S->facing) == newFacing) return;
     S->facing = newFacing;
@@ -565,7 +545,6 @@ bool _Move(Snake* S) {
     setColor(White);
     return false;
 }
-
 void _generateApple(Snake* S) {
     Location R;
     do {
@@ -578,12 +557,9 @@ void _generateApple(Snake* S) {
     printf("★");
     setColor(White);
 }
-
 Snake* newSnake() {
     Snake* newS = (Snake*)malloc(sizeof(Snake));
-    Deque* tmp = newDeque();
-    newS->block = *tmp;
-    free(tmp);
+    newS->block = *(newDeque());
     Deque* block = &(newS->block);
     newS->isGameOvered = false;
     newS->score = 0;
@@ -614,7 +590,6 @@ Snake* newSnake() {
     dq_init(&newS->inputQ);
     return newS;
 }
-
 Snake* player;
 void lobby();
 DWORD WINAPI moveSnakeThread(LPVOID lpParam){
@@ -645,6 +620,7 @@ DWORD WINAPI rotateSnakeThread(LPVOID lpParam){
     return 0;
 }
 
+/// 싱글 플레이 전용 게임 오버 스크린
 void GameOver() {
     COORD T= {0, 0};
     FillConsoleOutputCharacter(stdHandle, ' ', 300 * 300, T, &dw);
@@ -764,7 +740,9 @@ void clearScreen() {
     Sleep(10);
 }
 
+/// ----- 멀티 플레이어 지원을 위한 여러 자료구조 및 프로토콜 포맷 설정 -----
 
+/// JSON 포맷 직접 구현, 직렬화 및 역직렬화 구현
 typedef struct JSON {
     StrDeque* properties;
     StrDeque* values;
@@ -884,7 +862,7 @@ JSON* newJSON() {
     return J;
 }
 
-
+/// !!! HTTP 프로토콜처럼 통신, POST 메서드
 JSON* POST(SOCKET S, JSON* J) {
     const char *msg = J->toString(J);   // '\n' 구분자 필수
     if (psend(S, msg, (int)strlen(msg), 0) == SOCKET_ERROR) {
@@ -901,14 +879,16 @@ JSON* POST(SOCKET S, JSON* J) {
         if (buf[total++] == '\n') break;
     }
     buf[total-1] = '\0';
-    gotoxy(0, 20); printf("[JSON LOGGER] %s \n", buf);
 
+    if ( DEBUG ) {
+        gotoxy(0, 20); printf("[JSON LOGGER] %s \n", buf);
+    }
     JSON* response = newJSON();
     response->load(response, buf);
     return response;
 }
 
-// 파일에서 전체 JSON 로드 후 J에 채워넣고 반환
+/// 파일에서 전체 JSON 로드 후 J에 채워넣고 반환
 static JSON* loadStorage(void) {
     JSON* storage = newJSON();
     FILE* fp = fopen(LOCAL_STORAGE_FILE, "r");
@@ -922,7 +902,7 @@ static JSON* loadStorage(void) {
     return storage;
 }
 
-// JSON을 직렬화해서 파일에 쓰기
+/// JSON을 직렬화해서 파일에 쓰기
 static void saveStorage(JSON* storage) {
     char* out = storage->toString(storage);
     FILE* fp = fopen(LOCAL_STORAGE_FILE, "w");
@@ -939,7 +919,7 @@ void saveToLocalStorage(char* property, char* value) {
     saveStorage(storage);
 }
 
-// 로컬스토리지에서 프로퍼티 읽기 (없으면 NULL 반환)
+/// 로컬스토리지에서 프로퍼티 읽기 (없으면 NULL 반환)
 char* loadFromLocalStorage(char* property) {
     JSON* storage = loadStorage();
     // 존재하지 않으면 NULL, 있으면 strdup된 문자열 반환
@@ -950,8 +930,15 @@ char* loadFromLocalStorage(char* property) {
     return strdup(storage->values->at(storage->values, idx));
 }
 
+// 현재 클라이언트의 고유 식별자
 char *clientID;
 
+// 서버와 연결할 소켓
+SOCKET s;
+
+bool online = false;
+
+/// source에 F가 몇 개 있는지 세서 반환
 int getCountInStr(char* source, char F) {
     int len = strlen(source);
     int ret = 0;
@@ -962,65 +949,69 @@ int getCountInStr(char* source, char F) {
     return ret;
 }
 
-
-void multiPlayerGame() {
-    clearScreen();
-    /* 1) 연결 -------------------------------------------------------------- */
-    SOCKET s = psocket(AF_INET, SOCK_STREAM, 0);
+/// 멀티 플레이 및 기록 저장 서버와 연결
+/// @return 성공 여부 반환
+bool connectWithKnownServer() {
+    s = psocket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in srv = {0};
-    srv.sin_family      = AF_INET;
-    srv.sin_port        = phtons(12345);
+    srv.sin_family = AF_INET;
+    srv.sin_port = phtons(12345);
     srv.sin_addr.s_addr = phtonl(0x67F4766E);
 
-    gotoxy(0, 1);
-    clientID = loadFromLocalStorage("clientID");
-    if (clientID == NULL) {
-        printf("저장된 클라이언트 ID 없음.\n");
-    } else {
-        printf("저장된 ID: %s\n", clientID);
-    }
-
-    system("pause > nul");
-    clearScreen();
-
-    gotoxy(0, 1);
-    printf("서버에 연결하는 중...");
-
     if (pconnect(s, (struct sockaddr*)&srv, sizeof srv) == SOCKET_ERROR) {
-        char buf[128];
-        sprintf(buf, "connect 실패 : %d", pWSAGetLastError());
-        MessageBoxA(NULL, buf, "ERROR", MB_ICONERROR);
+        //char buf[128];
+        //sprintf(buf, "connect 실패 : %d", pWSAGetLastError());
+        //MessageBoxA(NULL, buf, "ERROR", MB_ICONERROR);
         pclosesocket(s);
         exit(0);
     }
 
-    /* 2) 전송 -------------------------------------------------------------- */
-    {
-        JSON* json = newJSON();
-        json->set(json, "to", "'/check-connection'");
-        json->set(json, "verify", "'SYN'");
-        JSON* response = POST(s, json);
-        gotoxy(0, 1); printf("[서버 응답 코드] %s \n", response->get(response, "status"));
-        printf("[JSON] %s\n", response->get(response, "text"));
+    JSON* json = newJSON();
+    json->set(json, "to", "'/check-connection'");
+    json->set(json, "verify", "'SYN'");
+    JSON* response = POST(s, json);
 
+    if (DEBUG) {
+        gotoxy(0, 1); printf("[서버 응답 코드] %s \n", response->get(response, "status"));
+        printf("[JSON] %s\n", response->get(response, "status"));
     }
-    system("pause > nul");
-    clearScreen();
+
+    if (strcmp(response->get(response, "status"), "200") == 0) return true;
+    return false;
+}
+
+void issueClientID() {
+    clientID = loadFromLocalStorage("clientID");
+    if (clientID == NULL) {
+        if (DEBUG) printf("저장된 클라이언트 ID 없음.\n");
+    } else {
+        if (DEBUG) printf("저장된 ID: %s\n", clientID);
+    }
+
     if (clientID == NULL)
     {
         JSON* json = newJSON();
         json->set(json, "to", "'/getClientID'");
         JSON* response = POST(s, json);
         if (strcmp(response->get(response, "status"),"200") == 0) {
-            gotoxy(0, 1); printf("[발급된 ClientID] %s \n", response->get(response, "text"));
+            if (DEBUG) gotoxy(0, 19);
+            if (DEBUG) printf("[발급된 ClientID] %s \n", response->get(response, "text"));
             saveToLocalStorage("clientID", response->get(response, "text"));
         } else {
-            gotoxy(0, 1); printf("[ClientID 발급 중 에러] %s \n", response->get(response, "text"));
+            if (DEBUG) gotoxy(0, 19);
+            if (DEBUG) printf("[ClientID 발급 중 에러] %s \n", response->get(response, "text"));
         }
-    } else {
-        gotoxy(0, 1); printf("[발급된 ClientID] %s \n", clientID);
+    } else if (DEBUG) {
+        printf("[발급된 ClientID] %s \n", clientID);
     }
-    system("pause > nul");
+}
+
+int getLatencyToServer() {
+
+}
+
+
+void multiPlayerGame() {
 SELECT_ROOM:
     clearScreen();
 
@@ -1031,7 +1022,6 @@ SELECT_ROOM:
         json->set(json, "to", "'/getRoomIDList'");
         JSON* roomIDListResponse = POST(s, json);
         char* roomIDList = roomIDListResponse->get(roomIDListResponse, "text");
-        //printf("%s\n", roomIDList);
 
         int roomCount = getCountInStr(roomIDList, ',')+1;
 
@@ -1118,6 +1108,7 @@ SELECT_ROOM:
         }
         if (selected == roomCount) {
             // 방을 새로 만드는 경우
+
         } else {
             JSON* J = newJSON();
             J->set(J, "to", "'/joinRoom'");
@@ -1132,15 +1123,9 @@ SELECT_ROOM:
 
         }
     }
-
-
-
-
     /* 5) 종료 -------------------------------------------------------------- */
     pshutdown(s, SD_SEND);                     // FIN
     pclosesocket(s);
-
-
 }
 
 void lobby()
@@ -1164,8 +1149,6 @@ void lobby()
     printf("> 싱글 플레이 (점수)");
     gotoxy(70, 22);
     printf("  멀티 플레이 (대결)");
-    //gotoxy(70, 24);
-    //printf("  리듬 게임");
 
     bool isSinglePlayer = true;
     while (!isPressed(VK_RETURN))
@@ -1238,5 +1221,34 @@ int main(void)
         // Windows 11
         SetWindowPos(owner, NULL, 0, 0, 1500, 900, SWP_NOZORDER|SWP_NOMOVE);
     }
+
+    printf("서버와 연결 중...\n");
+
+    online = connectWithKnownServer();
+    if (online) {
+        setColor(LightGreen);
+        printf("서버와 연결되었습니다!\n\n");
+        setColor(White);
+
+
+        printf("클라이언트 식별 아이디를 발급 중...\n");
+        issueClientID();
+        if (clientID != NULL) {
+            setColor(LightGreen);
+            printf("클라이언트 식별 아이디: %s\n", clientID);
+        }
+    } else {
+        setColor(LightRed);
+        printf("인터넷 연결 없음: 오프라인 기능만 이용할 수 있습니다!\n ");
+    }
+    setColor(LightBlue);
+
+
+    for (int i = 3; i >= 1; i--) {
+        gotoxy(0, online ? 6 : 4);
+        printf("%d초 후 시작 화면으로 이동합니다!", i);
+        Sleep(1000);
+    }
+    setColor(White);
     lobby();
 }
