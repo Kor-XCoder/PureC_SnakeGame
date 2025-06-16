@@ -18,17 +18,20 @@
 
 
 // 로컬 스토리지 저장 파일명
-#define LOCAL_STORAGE_FILE "local_storage.json"
+#define LOCAL_STORAGE_FILE "1428_local_storage.json"
 
 // --------- winsock2.h 직접 재정의 ---------
 #undef htons
 #undef htonl
 
+bool online = false;
+char *name;
+
 static HMODULE hMod;
 typedef int  (WINAPI *WSAStartup_t)(WORD, LPWSADATA);
 typedef int  (WINAPI *WSACleanup_t)(void);
-typedef SOCKET (WINAPI *socket_t)(int,int,int);
 typedef int  (WINAPI *connect_t)(SOCKET,const struct sockaddr*,int);
+typedef SOCKET (WINAPI *socket_t)(int,int,int);
 typedef int  (WINAPI *send_t)(SOCKET,const char*,int,int);
 typedef int  (WINAPI *recv_t)(SOCKET,char*,int,int);
 typedef int  (WINAPI *shutdown_t)(SOCKET,int);
@@ -49,6 +52,13 @@ typedef u_short (WINAPI *htons_t)(u_short);
 typedef u_long  (WINAPI *htonl_t)(u_long);
 static htons_t phtons;
 static htonl_t phtonl;
+
+
+// 현재 클라이언트의 고유 식별자
+char *clientID;
+
+// 서버와 연결할 소켓
+SOCKET s;
 
 // --------- TCP-IP 바이트 헬퍼 ---------
 static unsigned short htons16(unsigned short v){ return (v >> 8) | (v << 8); }  // 16-bit swap
@@ -330,6 +340,30 @@ typedef struct StrNode {
     struct StrNode* prev;
     struct StrNode* next;
 }StrNode;
+void renderRect(int H, int W, COORD start) {
+    gotoxy(start.X, start.Y);
+    printf("┌");
+
+    gotoxy(start.X, start.Y+H-1);
+    printf("└");
+    for (int i = 1; i < W-1; i++) {
+        gotoxy(start.X+i*2-1, start.Y);
+        printf("──");
+        gotoxy(start.X+i*2-1, start.Y+H-1);
+        printf("──");
+    }
+    gotoxy(start.X+(W - 1)*2-1, start.Y);
+    printf("┐");
+    gotoxy(start.X+(W - 1)*2-1, start.Y+H-1);
+    printf("┘");
+
+    for (int i = 1; i < H-1; i++) {
+        gotoxy(start.X, start.Y + i);
+        printf("│");
+        gotoxy(start.X + (W - 1)*2-1, start.Y + i);
+        printf("│");
+    }
+}
 
 // Snake 구조체 구현을 위한 덱 자료구조 구현
 typedef struct StrDeque {
@@ -365,7 +399,7 @@ char* _2at(StrDeque* _d, int index) {
     }
     return cur->data;
 }
-void* _2change(StrDeque* _d, int index, char* E) {
+void _2change(StrDeque* _d, int index, char* E) {
     StrNode* cur = _d->head;
     for (int i = 0; i < index; i++) {
         cur = cur->next;
@@ -411,9 +445,9 @@ void _2pop_front(StrDeque* _d) {
     _d->head = newHead;
     _d->size--;
 }
-void _2pop_back(Deque* _d) {
+void _2pop_back(StrDeque* _d) {
     if (_d->size <= 0) return;
-    Node* newTail = _d->tail->prev;
+    StrNode* newTail = _d->tail->prev;
     free(_d->tail);
     _d->tail = newTail;
     _d->size--;
@@ -620,126 +654,6 @@ DWORD WINAPI rotateSnakeThread(LPVOID lpParam){
     return 0;
 }
 
-/// 싱글 플레이 전용 게임 오버 스크린
-void GameOver() {
-    COORD T= {0, 0};
-    FillConsoleOutputCharacter(stdHandle, ' ', 300 * 300, T, &dw);
-    gotoxy(0, 0);
-    setColor(Red);
-    puts(" _______  _______  __   __  _______    _______  __   __  _______  ______   ");
-    puts("|       ||   _   ||  |_|  ||       |  |       ||  | |  ||       ||    _ |  ");
-    puts("|    ___||  |_|  ||       ||    ___|  |   _   ||  |_|  ||    ___||   | ||  ");
-    puts("|   | __ |       ||       ||   |___   |  | |  ||       ||   |___ |   |_||_ ");
-    puts("|   ||  ||       ||       ||    ___|  |  |_|  ||       ||    ___||    __  |");
-    puts("|   |_| ||   _   || ||_|| ||   |___   |       | |     | |   |___ |   |  | |");
-    puts("|_______||__| |__||_|   |_||_______|  |_______|  |___|  |_______||___|  |_|");
-
-    setColor(White);
-    gotoxy(60, 15);
-    printf("최종 스코어: ");
-    int sc = player->score;
-    int WaitingTime = 200;
-    for (int i = 0; i <= sc; i++)
-    {
-        gotoxy(73, 15);
-        printf("        ");
-        gotoxy(73, 15);
-        printf("%d", i);
-        WaitingTime -= WaitingTime * 0.1;
-        Sleep(WaitingTime);
-    }
-
-    gotoxy(0, 9);
-    if (sc < 300)
-    {
-        setColor(Red);
-        puts("         _______ ");
-        puts("        |       |");
-        puts("        |    ___|");
-        puts("        |   |___ ");
-        puts("        |    ___|");
-        puts("        |   |    ");
-        puts("        |___|    ");
-    }
-    else if (sc < 700)
-    {
-        setColor(Blue);
-        puts("         _______ ");
-        puts("        |       |");
-        puts("        |    ___|");
-        puts("        |   |    ");
-        puts("        |   |___ ");
-        puts("        |       |");
-        puts("        |_______|");
-    }
-    else if (sc < 2000)
-    {
-        setColor(BlueGreen);
-        puts("         _______ ");
-        puts("        |  _    |");
-        puts("        | |_|   |");
-        puts("        |      _|");
-        puts("        |  _  |_ ");
-        puts("        | |_|   |");
-        puts("        |_______|");
-    }
-    else if (sc < 3000)
-    {
-        setColor(Green);
-        puts("         _______ ");
-        puts("        |   _   |");
-        puts("        |  | |  |");
-        puts("        |  |_|  |");
-        puts("        |       |");
-        puts("        |   _   |");
-        puts("        |__| |__|");
-    }
-    else if (sc < 5000)
-    {
-        setColor(LightGreen);
-        puts("         _______    _    ");
-        puts("        |   _   | _| |_  ");
-        puts("        |  | |  ||_   _| ");
-        puts("        |  |_|  |  |_|   ");
-        puts("        |       |");
-        puts("        |   _   |");
-        puts("        |__| |__|");
-    }
-    else if (sc < 10000)
-    {
-        setColor(Yellow);
-        puts("         _______ ");
-        puts("        |       |");
-        puts("        |  _____|");
-        puts("        | |_____ ");
-        puts("        |_____  |");
-        puts("         _____| |");
-        puts("        |_______|");
-    }
-    else
-    {
-        setColor(LightYellow);
-        puts("         _______    _    ");
-        puts("        |       | _| |_  ");
-        puts("        |  _____||_   _| ");
-        puts("        | |_____   |_|    ");
-        puts("        |_____  |");
-        puts("         _____| |");
-        puts("        |_______|");
-    }
-    setColor(White);
-
-
-    gotoxy(0, 17);
-    system("pause");
-    lobby();
-}
-void clearScreen() {
-    COORD T = {0, 0};
-    FillConsoleOutputCharacter(stdHandle, ' ', 300 * 300, T, &dw);
-    Sleep(10);
-}
-
 /// ----- 멀티 플레이어 지원을 위한 여러 자료구조 및 프로토콜 포맷 설정 -----
 
 /// JSON 포맷 직접 구현, 직렬화 및 역직렬화 구현
@@ -862,26 +776,47 @@ JSON* newJSON() {
     return J;
 }
 
+long long lastPing = -1;
+long long getNowMS() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec * 1000000LL + tv.tv_usec;
+}
+/// source에 F가 몇 개 있는지 세서 반환
+int getCountInStr(char* source, char F) {
+    int len = strlen(source);
+    int ret = 0;
+    int i;
+    for (i = 0; source[i] != ';'; i++)
+        ret += (source[i] == F);
+    source[i] = '\0';
+    return ret;
+}
+
 /// !!! HTTP 프로토콜처럼 통신, POST 메서드
 JSON* POST(SOCKET S, JSON* J) {
     const char *msg = J->toString(J);   // '\n' 구분자 필수
+    long long T1 = getNowMS();
     if (psend(S, msg, (int)strlen(msg), 0) == SOCKET_ERROR) {
         MessageBoxA(NULL, "send() 실패", "ERROR", MB_ICONERROR);
         pclosesocket(S);
         exit(0);
     }
+    long long T2 = -1;
 
     char buf[1024] = {0};
     int total = 0;
     while (total < sizeof buf - 1) {           // '\n' 올 때까지 모음
         int n = precv(S, buf + total, 1, 0);   // 1바이트씩 읽기(단순)
+        if (T2 == -1) T2 = getNowMS();
         if (n <= 0) break;
         if (buf[total++] == '\n') break;
     }
     buf[total-1] = '\0';
+    lastPing = T2-T1;
 
     if ( DEBUG ) {
-        gotoxy(0, 20); printf("[JSON LOGGER] %s \n", buf);
+        gotoxy(0, 30); printf("[JSON LOGGER] %s \n", buf);
     }
     JSON* response = newJSON();
     response->load(response, buf);
@@ -930,24 +865,227 @@ char* loadFromLocalStorage(char* property) {
     return strdup(storage->values->at(storage->values, idx));
 }
 
-// 현재 클라이언트의 고유 식별자
-char *clientID;
 
-// 서버와 연결할 소켓
-SOCKET s;
+/// 싱글 플레이 전용 게임 오버 스크린
+void GameOver() {
+    COORD T= {0, 0};
+    FillConsoleOutputCharacter(stdHandle, ' ', 300 * 300, T, &dw);
+    gotoxy(0, 0);
+    setColor(Red);
+    puts(" _______  _______  __   __  _______    _______  __   __  _______  ______   ");
+    puts("|       ||   _   ||  |_|  ||       |  |       ||  | |  ||       ||    _ |  ");
+    puts("|    ___||  |_|  ||       ||    ___|  |   _   ||  |_|  ||    ___||   | ||  ");
+    puts("|   | __ |       ||       ||   |___   |  | |  ||       ||   |___ |   |_||_ ");
+    puts("|   ||  ||       ||       ||    ___|  |  |_|  ||       ||    ___||    __  |");
+    puts("|   |_| ||   _   || ||_|| ||   |___   |       | |     | |   |___ |   |  | |");
+    puts("|_______||__| |__||_|   |_||_______|  |_______|  |___|  |_______||___|  |_|");
 
-bool online = false;
+    setColor(White);
+    gotoxy(60, 15);
+    printf("최종 스코어: ");
+    int sc = player->score;
+    int WaitingTime = 200;
+    for (int i = 0; i <= sc; i++)
+    {
+        gotoxy(73, 15);
+        printf("        ");
+        gotoxy(73, 15);
+        printf("%d", i);
+        WaitingTime -= WaitingTime * 0.1;
+        Sleep(WaitingTime);
+    }
 
-/// source에 F가 몇 개 있는지 세서 반환
-int getCountInStr(char* source, char F) {
-    int len = strlen(source);
-    int ret = 0;
-    int i;
-    for (i = 0; source[i] != ';'; i++)
-        ret += (source[i] == F);
-    source[i] = '\0';
-    return ret;
+    gotoxy(0, 9);
+    if (sc < 300)
+    {
+        setColor(Red);
+        puts("         _______ ");
+        puts("        |       |");
+        puts("        |    ___|");
+        puts("        |   |___ ");
+        puts("        |    ___|");
+        puts("        |   |    ");
+        puts("        |___|    ");
+    }
+    else if (sc < 700)
+    {
+        setColor(Blue);
+        puts("         _______ ");
+        puts("        |       |");
+        puts("        |    ___|");
+        puts("        |   |    ");
+        puts("        |   |___ ");
+        puts("        |       |");
+        puts("        |_______|");
+    }
+    else if (sc < 2000)
+    {
+        setColor(BlueGreen);
+        puts("         _______ ");
+        puts("        |  _    |");
+        puts("        | |_|   |");
+        puts("        |      _|");
+        puts("        |  _  |_ ");
+        puts("        | |_|   |");
+        puts("        |_______|");
+    }
+    else if (sc < 3000)
+    {
+        setColor(Green);
+        puts("         _______ ");
+        puts("        |   _   |");
+        puts("        |  | |  |");
+        puts("        |  |_|  |");
+        puts("        |       |");
+        puts("        |   _   |");
+        puts("        |__| |__|");
+    }
+    else if (sc < 5000)
+    {
+        setColor(LightGreen);
+        puts("         _______    _    ");
+        puts("        |   _   | _| |_  ");
+        puts("        |  | |  ||_   _| ");
+        puts("        |  |_|  |  |_|   ");
+        puts("        |       |");
+        puts("        |   _   |");
+        puts("        |__| |__|");
+    }
+    else if (sc < 10000)
+    {
+        setColor(Yellow);
+        puts("         _______ ");
+        puts("        |       |");
+        puts("        |  _____|");
+        puts("        | |_____ ");
+        puts("        |_____  |");
+        puts("         _____| |");
+        puts("        |_______|");
+    }
+    else
+    {
+        setColor(LightYellow);
+        puts("         _______    _    ");
+        puts("        |       | _| |_  ");
+        puts("        |  _____||_   _| ");
+        puts("        | |_____   |_|    ");
+        puts("        |_____  |");
+        puts("         _____| |");
+        puts("        |_______|");
+    }
+    setColor(Yellow);
+
+    if (online) {
+        JSON* ujson = newJSON();
+        ujson->set(ujson, "to", "'/updateScore'");
+        char str[20];
+        char str2[20];
+        sprintf(str, "'%s'\0", loadFromLocalStorage("clientID"));
+        sprintf(str2, "%d", sc);
+        ujson->set(ujson, "clientID", str);
+        ujson->set(ujson, "score", str2);
+        POST(s, ujson);
+
+        JSON* json = newJSON();
+        json->set(json, "to", "'/getRankings'");
+        JSON* rankingResponse = POST(s, json);
+        //JSON* rankingResponse; rankingResponse->load(rankingResponse, "{status:200,text:'dgffjfkjas, fjfjsdfjgo'");
+        char* rankingList = rankingResponse->get(rankingResponse, "text");
+        int rankCount = getCountInStr(rankingList, ',')+1;
+        char** rankIDList = (char**)malloc(sizeof(char*) * rankCount);
+        JSON** rankInfoList = (JSON**)malloc(sizeof(JSON*) * rankCount);
+
+        int i = 0;
+        char *ptr = strtok(rankingList,",");
+        while (ptr != NULL) {
+            rankIDList[i] = (char*)malloc(sizeof(char)*12);
+            sprintf(rankIDList[i++], "%s\0", ptr);
+            ptr = strtok(NULL,",");
+        }
+
+
+        gotoxy(85, 0);
+        puts(" ____             _    _                 ");
+        gotoxy(85, 1);
+        puts("|  _ \\ __ _ _ __ | | _(_)_ __   __ _ ___ ");
+        gotoxy(85, 2);
+        puts("| |_) / _` | '_ \\| |/ / | '_ \\ / _` / __|");
+        gotoxy(85, 3);
+        puts("|  _ < (_| | | | |   <| | | | | (_| \\__ \\");
+        gotoxy(85, 4);
+        puts("|_| \\_\\__,_|_| |_|_|\\_\\_|_| |_|\\__, |___/");
+        gotoxy(85, 5);
+        puts("                               |___/     ");
+
+        gotoxy(130, 0);
+        puts("  ________");
+        gotoxy(130, 1);
+        puts(" |        |");
+        gotoxy(130, 2);
+        puts("(|   #1   |)");
+        gotoxy(130, 3);
+        puts("  \\      /");
+        gotoxy(130, 4);
+        puts("   `----'");
+        gotoxy(130, 5);
+        puts("   _|__|_");
+        setColor(White);
+
+        COORD pos = {85, 7};
+
+
+
+
+        // 상위 10등만 표시
+        for (int i = 0; i < rankCount; i++) {
+            JSON* rjson = newJSON();
+            rjson->set(rjson, "to", "'/getClientInfo'");
+            char str[20];
+            sprintf(str, "'%s'", rankIDList[i]);
+            rjson->set(rjson, "clientID", str);
+
+            JSON* response = POST(s, rjson);
+
+            renderRect(3, 30, pos);
+            gotoxy(87, pos.Y+1);
+            char *t;
+            if (i+1 == 1) t = "st";
+            else if (i+1 == 2) t = "nd";
+            else if (i+1 == 3) t = "rd";
+            else t = "th";
+            printf("%d%s", i+1, t);
+
+            gotoxy(92, pos.Y+1);
+            printf("%s", response->get(response, "name"));
+            char bf[100];
+            sprintf(bf, "%s\0", response->get(response, "bestScore"));
+            gotoxy(139 - strlen(bf), pos.Y+1);
+            printf("%s점", bf);
+            pos.Y += 3;
+        }
+    }
+
+
+
+
+
+
+    gotoxy(0, 17);
+    system("pause");
+    lobby();
 }
+void clearScreen() {
+    COORD T = {0, 0};
+    FillConsoleOutputCharacter(stdHandle, ' ', 300 * 300, T, &dw);
+    Sleep(10);
+}
+
+
+
+
+
+
+
 
 /// 멀티 플레이 및 기록 저장 서버와 연결
 /// @return 성공 여부 반환
@@ -963,7 +1101,7 @@ bool connectWithKnownServer() {
         //sprintf(buf, "connect 실패 : %d", pWSAGetLastError());
         //MessageBoxA(NULL, buf, "ERROR", MB_ICONERROR);
         pclosesocket(s);
-        exit(0);
+        return false;
     }
 
     JSON* json = newJSON();
@@ -1006,9 +1144,17 @@ void issueClientID() {
     }
 }
 
-int getLatencyToServer() {
-
+long long getLatencyToServer() {
+    JSON* json = newJSON();
+    json->set(json,"to", "'/ping'");
+    JSON* response = POST(s, json);
+    if (strcmp(response->get(response, "status"), "200") != 0) {
+        MessageBoxA(NULL, "Error while /ping", "ERROR", MB_ICONERROR);
+        exit(0);
+    }
+    return lastPing;
 }
+
 
 
 void multiPlayerGame() {
@@ -1149,6 +1295,7 @@ void lobby()
     printf("> 싱글 플레이 (점수)");
     gotoxy(70, 22);
     printf("  멀티 플레이 (대결)");
+    Sleep(300);
 
     bool isSinglePlayer = true;
     while (!isPressed(VK_RETURN))
@@ -1205,6 +1352,7 @@ void lobby()
 
 int main(void)
 {
+    system("chcp 65001 > nul");
     winsock_dynload();
     CONSOLE_CURSOR_INFO cursorInfo = { 0, };
     cursorInfo.dwSize = 1;
@@ -1235,17 +1383,49 @@ int main(void)
         issueClientID();
         if (clientID != NULL) {
             setColor(LightGreen);
-            printf("클라이언트 식별 아이디: %s\n", clientID);
+            printf("클라이언트 식별 아이디: %s\n\n", clientID);
         }
+        setColor(White);
+        printf("서버와의 레이턴시(Latency) 측정 중... Ping!\n");
+        long long latency = getLatencyToServer();
+        setColor(LightGreen);
+        printf("Pong! %lldms\n\n", latency/1000);
+        setColor(White);
+
+        name = loadFromLocalStorage("name");
+        if (name == NULL) {
+            printf("저장된 클라이언트 ID 없음.\n");
+            char temp[100];
+            printf("사용할 이름 입력: "); scanf("%s", temp);
+            fflush(stdin);
+
+            saveToLocalStorage("name", temp);
+            name  = loadFromLocalStorage("name");
+
+            char temp3[100];
+            JSON* rjson = newJSON();
+            rjson->set(rjson, "to", "'/updateName'");
+            sprintf(temp3, "'%s'\0", loadFromLocalStorage("clientID"));
+            rjson->set(rjson, "clientID", temp3);
+
+            char temp2[100];
+            sprintf(temp2, "'%s'\0", name);
+            rjson->set(rjson, "name", temp2);
+            POST(s, rjson);
+
+        } else {
+            printf("사용 중인 이름: %s (바꾸려면 1428_local_storage.json 참조)\n", name);
+        }
+
+
     } else {
         setColor(LightRed);
         printf("인터넷 연결 없음: 오프라인 기능만 이용할 수 있습니다!\n ");
     }
     setColor(LightBlue);
 
-
     for (int i = 3; i >= 1; i--) {
-        gotoxy(0, online ? 6 : 4);
+        gotoxy(0, online ? 15 : 4);
         printf("%d초 후 시작 화면으로 이동합니다!", i);
         Sleep(1000);
     }
