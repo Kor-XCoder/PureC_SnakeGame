@@ -799,7 +799,6 @@ JSON* POST(SOCKET S, JSON* J) {
     long long T1 = getNowMS();
     if (psend(S, msg, (int)strlen(msg), 0) == SOCKET_ERROR) {
         MessageBoxA(NULL, "send() 실패", "ERROR", MB_ICONERROR);
-        pclosesocket(S);
         exit(0);
     }
     long long T2 = -1;
@@ -977,13 +976,13 @@ void GameOver() {
 
     if (online) {
         JSON* ujson = newJSON();
-        ujson->set(ujson, "to", "'/updateScore'");
+        ujson->set(ujson, "to", "'/us'");
         char str[20];
         char str2[20];
         sprintf(str, "'%s'\0", loadFromLocalStorage("clientID"));
         sprintf(str2, "%d", sc);
-        ujson->set(ujson, "clientID", str);
-        ujson->set(ujson, "score", str2);
+        ujson->set(ujson, "cl", str);
+        ujson->set(ujson, "sc", str2);
         POST(s, ujson);
 
         JSON* json = newJSON();
@@ -1045,6 +1044,7 @@ void GameOver() {
             rjson->set(rjson, "clientID", str);
 
             JSON* response = POST(s, rjson);
+            Sleep(100);
 
             renderRect(3, 30, pos);
             gotoxy(87, pos.Y+1);
@@ -1100,7 +1100,7 @@ bool connectWithKnownServer() {
         //char buf[128];
         //sprintf(buf, "connect 실패 : %d", pWSAGetLastError());
         //MessageBoxA(NULL, buf, "ERROR", MB_ICONERROR);
-        pclosesocket(s);
+        //pclosesocket(s);
         return false;
     }
 
@@ -1270,8 +1270,8 @@ SELECT_ROOM:
         }
     }
     /* 5) 종료 -------------------------------------------------------------- */
-    pshutdown(s, SD_SEND);                     // FIN
-    pclosesocket(s);
+    //pshutdown(s, SD_SEND);                     // FIN
+    //pclosesocket(s);
 }
 
 void lobby()
@@ -1294,7 +1294,7 @@ void lobby()
     gotoxy(70, 20);
     printf("> 싱글 플레이 (점수)");
     gotoxy(70, 22);
-    printf("  멀티 플레이 (대결)");
+    printf("  조작 방법 및 게임 설명");
     Sleep(300);
 
     bool isSinglePlayer = true;
@@ -1308,14 +1308,14 @@ void lobby()
                 gotoxy(70, 20);
                 printf("> 싱글 플레이 (점수)");
                 gotoxy(70, 22);
-                printf("  멀티 플레이 (대결)");
+                printf("  조작 방법 및 게임 설명");
             }
             else
             {
                 gotoxy(70, 20);
                 printf("  싱글 플레이 (점수)");
                 gotoxy(70, 22);
-                printf("> 멀티 플레이 (대결)");
+                printf("> 조작 방법 및 게임 설명");
             }
             Sleep(300);
         }
@@ -1342,10 +1342,12 @@ void lobby()
 
     } else
     {
-        multiPlayerGame();
-        system("pause > nul");
-        Sleep(500);
-        lobby();
+        clearScreen();
+        gotoxy(0, 0);
+        printf("1. 상/하/좌/우 방향키를 통해 스네이크 조작.\n");
+        printf("2. 별을 먹으면 길이와 속도가 늘어나고, 빨간 세모에 닿으면 죽음.\n");
+        printf("3. 게임이 끝나면 자동으로 서버에 연결해 기록 저장.\n");
+        system("pause");
     }
 
 }
@@ -1430,5 +1432,5 @@ int main(void)
         Sleep(1000);
     }
     setColor(White);
-    lobby();
+    while(1) lobby();
 }
